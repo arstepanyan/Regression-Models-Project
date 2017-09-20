@@ -1,0 +1,98 @@
+---
+title: "Analysing Fuel consumption of mtcars data set in R database packages"
+author: "Araks Stepanyan"
+date: "8/10/2017"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+## Executive Summary
+
+This document is the final project of Coursera Regression Models course by Johns Hopkins University. Using R's *mtcars* data set, the main goal is to answer the following two questions. 1) Is an automatic or manual transmission better for MPG(miles per gallon)? 2) Can we quantify the MPG difference between automatic and manual transmissions?  
+
+We find that although 95% of the times manual transission is resulting on average `r round(confint(lm(mpg ~ factor(am), mtcars))[2,1], 2)` to `r round(confint(lm(mpg ~ factor(am), mtcars))[2,2],2)` more miles per gallon, after we adjust for Number of cylinders, Gross horsepower and Weight, the difference between manual and automatic (although still positive) is not significant any longer.   
+
+## Exploratory Data Analysis
+
+Let's load the *mtcars* data set and look at it's first 3 rows.  
+```{r starting, echo = FALSE, results = TRUE}
+data(mtcars)
+head(mtcars, 2)
+paste("Observations:", nrow(mtcars), ", Variables:", ncol(mtcars))
+```
+**Relationship between mpg and am** (Appendix, Figure 1). Manual transmission (am = 1) seems to be more effective as it results in more miles per gallon then automatic transmission (am = 0).  
+
+**Pairwise relationships** (Appendix, Figure 2). 1) Variables **cyl**, **vs**, **am**, **gear**, and **carb** have only few levels, so we will treat them as factors. 2) **disp** and **cyl** are highly correlated (because dispacement divided by number of cyliders is the mass of one cylinder), so we will include only one of them in our regression model.   
+
+## Initial Regression (*mpg* is the outcome, *am* is the only regressor)
+```{r regression_initial}
+fit_initial <- lm(mpg ~ factor(am), mtcars)
+```
+
+```{r summary_initial, echo = FALSE, results = TRUE}
+summary(fit_initial)$coef
+
+paste("Adjusted R Squared:", round(summary(fit_initial)$adj.r.squared,2))
+paste("Confidence Interval:(",round(confint(fit_initial)[2,][1],2),",",round(confint(fit_initial)[2,][2],2),")")
+```
+When we ignore other effects, 1) mean MPG in automatic setting is `r round(summary(fit_initial)$coef[1],2)` and mean MPG in manual setting is `r round(summary(fit_initial)$coef[1],2)` + `r round(summary(fit_initial)$coef[2],2)` = `r round(summary(fit_initial)$coef[1],2) + round(summary(fit_initial)$coef[2], 2) `. 2) 95% of the times the manual transmission results on average `r round(confint(fit_initial)[2,1], 2)` to `r round(confint(fit_initial)[2,2],2)` more miles per gallon. 3) `r round(summary(fit_initial)$adj.r.squared, 2)*100`% of the variation in mpg is explained by our model. We will try to do better.  
+
+## Nested ANOVA  
+
+From ANOVA results below we see that the additions of *cyl*, *disp*, *hp*, and *wt* variables are significant so we will include them in our final model (we will not include *disp* as it is highly correlated with *cyl*). As the additions of *drat*, *qsec*, *vs*, *gear* and *carb* are not significant, than we will omit these variable.  
+```{r ANOVA, echo = FALSE, results = TRUE}
+fit_1 <- lm(mpg ~ factor(am), mtcars)
+fit_2 <- lm(mpg ~ factor(am) + factor(cyl) + disp, mtcars)
+fit_3 <- lm(mpg ~ factor(am) + factor(cyl) + disp + hp, mtcars)
+fit_4 <- lm(mpg ~ factor(am) + factor(cyl) + disp + hp + drat, mtcars)
+fit_5 <- lm(mpg ~ factor(am) + factor(cyl) + disp + hp + drat + wt, mtcars)
+fit_6 <- lm(mpg ~ factor(am) + factor(cyl) + disp + hp + drat + wt + qsec, mtcars)
+fit_7 <- lm(mpg ~ factor(am) + factor(cyl) + disp + hp + drat + wt + qsec + factor(vs) + factor(gear) + factor(carb), mtcars)
+anova(fit_1, fit_2, fit_3, fit_4, fit_5, fit_6, fit_7)
+```
+## Regression with Four Regressors  
+```{r fit}
+fit <- lm(mpg ~ factor(am) + factor(cyl) + hp + wt, mtcars)
+```
+
+```{r coefficients, echo = FALSE, results = TRUE}
+summary(fit)$coef
+paste("Adjusted R Squared: ",round(summary(fit)$adj.r.squared,2))
+```
+This model is fitting better, it explains `r round((summary(fit)$adj.r.squared),2)*100`% of variation in mpg. But the transmission coeffitient (manual - automatic) is not significant anymore.    
+
+We could do farther regressions with interaction terms but this is already enough to see that the type of transmission is not so important when we account for  number of cylinders, gross horsepower and weight.  
+
+## Residuals (Appendix, Figure 3)  
+
+**Residuals vs Fitted**. There isn't any distinctive pattern, meaning that there isn't much relationship left out in the residuals. **Normal Q-Q**. The points are mostly close to the line (a good sign). **Scale-Location**. Similar to the first plot with standardized residuals (they appear randomly spread). **Residuals vs Leverage**. There are no influential cases as, there is no point outside of the Cook’s distance.    
+
+
+# Appendix  
+
+```{r libraries, message = F, include = F}
+require(GGally); require(ggplot2)
+```
+
+```{r Figure1_barplot, echo = FALSE}
+f <- ggplot(mtcars, aes(x =  factor(am), y = mpg, fill = factor(am)))
+f <- f + geom_boxplot()
+f <- f + theme(legend.position = "non")
+f <- f + ggtitle("Figure 1. Manual Transmission Yields Higher Miles Per Gallon \n               (Ignoring Other Effects)")
+f
+```
+
+```{r Figure2_pairwise_plotm, echo = FALSE, cache = TRUE}
+g <- ggpairs(mtcars, lower = list(continuous = "smooth"), upper = list(continuous = wrap("cor", size = 3)))
+g <- g + ggtitle("Figure 2. Pairwise Relaitionships")
+g
+```
+
+
+
+```{r Figure3_residuals, echo = FALSE}
+par(mfrow = c(2, 2), oma = c(0,0,2,0), mar=c(2,2,2,0))
+plot(fit, sub.caption = "Figure 3. Residuals and Leverage Points")
+
+```
